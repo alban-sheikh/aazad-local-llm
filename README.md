@@ -301,12 +301,6 @@ Chats are saved as one JSON file per conversation in `~/.local/share/aazad-chat/
 - API calls need the `X-Aazad-Chat: 1` header, so other websites you visit can't use your models or read your chats.
 - Model output is sanitized with DOMPurify and restricted by a strict Content-Security-Policy.
 
-## Brand
-
-- Name: **Aazad Chat** ("aazad" means free, independent)
-- Tagline: "Free, private AI on your own computer."
-- Colours: indigo `#4f46e5` → violet `#9333ea`; logo in `web/icon.svg`
-
 ## Credits
 
 - **Engine:** [Ollama](https://ollama.com).
