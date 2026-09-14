@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Aazad Chat: free, private AI on your own computer.">
+  <meta name="theme-color" content="#4f46e5">
+  <title>Aazad Chat</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/hljs-light.css" id="hljs-light">
+  <link rel="stylesheet" href="vendor/hljs-dark.css" id="hljs-dark">
+  <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <div><div class="brand-name">Aazad Chat</div><div class="brand-tag">Private AI</div></div>
+    </div>
+    <button id="newChat" class="btn primary wide" type="button">＋ New chat</button>
+    <input id="searchChats" type="search" placeholder="Search chats" aria-label="Search chats">
+    <nav id="chatList" aria-label="Saved chats"></nav>
+    <div class="side-foot">
+      <button id="openModels" class="btn ghost wide" type="button">📦 Models</button>
+      <button id="themeBtn" class="btn ghost wide" type="button">Theme: Auto</button>
+      <div id="serverStatus" class="status">Connecting…</div>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+
+  <main id="main">
+    <header id="topbar">
+      <button id="toggleSidebar" class="icon-btn" type="button" title="Show or hide chats" aria-label="Show or hide chats">☰</button>
+      <div class="model-picker">
+        <select id="modelSelect" aria-label="Model"></select>
+        <span id="modelInfo"></span>
+      </div>
+      <div class="spacer"></div>
+      <button id="settingsBtn" class="icon-btn" type="button" title="Chat settings" aria-label="Chat settings">⚙</button>
+    </header>
+    <div id="banner" role="status" hidden></div>
+    <section id="messages" aria-live="polite"></section>
+    <footer id="composer">
+      <div id="attachments" hidden></div>
+      <div class="input-row">
+        <button id="attachBtn" class="icon-btn" type="button" title="Attach image" aria-label="Attach image">📎</button>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden>
+        <textarea id="input" rows="1" placeholder="Message Aazad Chat…" aria-label="Message"></textarea>
+        <button id="sendBtn" class="btn primary" type="button">Send</button>
+        <button id="stopBtn" class="btn danger" type="button" hidden>Stop</button>
+      </div>
+      <div class="hint">
+        <span>Enter to send · Shift+Enter for a new line · paste or drop images · runs 100% on this computer</span>
+        <label id="thinkWrap" hidden title="Let the model reason before answering"><input id="thinkToggle" type="checkbox"> Thinking</label>
+      </div>
+    </footer>
+  </main>
+
+  <aside id="settings" hidden>
+    <div class="panel-head"><h2>Chat settings</h2><button id="closeSettings" class="icon-btn" type="button" aria-label="Close settings">✕</button></div>
+    <label class="field"><span>System prompt</span>
+      <textarea id="sysPrompt" placeholder="e.g. You are a concise senior Python developer."></textarea>
+      <small>Standing instructions for the model in this chat.</small></label>
+    <label class="field"><span>Temperature: <b id="tempVal">0.7</b></span>
+      <input id="temp" type="range" min="0" max="2" step="0.1">
+      <small>Lower = focused and repeatable. Higher = more creative.</small></label>
+    <label class="field"><span>Context length</span>
+      <select id="numCtx">
+        <option value="0">Default (4K)</option>
+        <option value="2048">2K</option>
+        <option value="4096">4K</option>
+        <option value="8192">8K</option>
+        <option value="16384">16K</option>
+        <option value="32768">32K</option>
+      </select>
+      <small>How much of the conversation the model can see. On this 8 GB GPU, 16K+ makes 8B models spill to the CPU (about 25–35% slower).</small></label>
+    <label class="field"><span>Max reply length (tokens)</span>
+      <input id="numPredict" type="number" min="0" step="50" placeholder="No limit">
+      <small>Leave empty for no limit. Thinking models need a high limit or none.</small></label>
+    <label class="field"><span>Keep model loaded</span>
+      <select id="keepAlive">
+        <option value="">Default (30 min)</option>
+        <option value="5m">5 minutes</option>
+        <option value="1h">1 hour</option>
+        <option value="-1">Until unloaded</option>
+        <option value="0">Unload after each reply</option>
+      </select>
+      <small>Loading a model from the HDD can take ~40 s, so keeping it loaded makes replies start fast.</small></label>
+    <p class="muted small">New chats start with these settings.<br>Tip: to compare models, switch the model at the top and press <b>Regenerate</b>.</p>
+  </aside>
+</div>
+
+<div id="modelsModal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modelsTitle">
+    <div class="panel-head"><h2 id="modelsTitle">Models</h2><button id="closeModels" class="icon-btn" type="button" aria-label="Close">✕</button></div>
+    <div class="pull-row">
+      <input id="pullName" placeholder="Model to download, e.g. qwen2.5-coder:7b" aria-label="Model name">
+      <button id="pullBtn" class="btn primary" type="button">Download</button>
+      <button id="pullCancel" class="btn" type="button" hidden>Cancel</button>
+    </div>
+    <div id="suggested" class="chips"></div>
+    <div class="muted small">These fit your 8 GB GPU. Browse more in the <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer">model library</a>.</div>
+    <div id="pullProgress" hidden></div>
+    <div class="section-title"><span>Installed</span><span id="diskNote"></span></div>
+    <div id="modelList"></div>
+  </div>
+</div>
+
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="vendor/highlight.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

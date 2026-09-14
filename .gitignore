@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local user data never belongs in the repo (chats live in ~/.local/share/aazad-chat)
+chats/
+*.log
+.env
+.env.*
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
