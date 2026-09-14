@@ -18,13 +18,71 @@ It has no build step and no dependencies: a small Python standard-library server
 
 ## Contents
 
-- [Quick start](#quick-start)
+- [Install with one command](#install-with-one-command) · [Manual quick start](#quick-start)
 - [1. Install Ollama](#1-install-ollama): [Linux](#linux) · [macOS](#macos) · [Windows](#windows) · [Docker](#docker-any-os) · [Check it works](#check-that-ollama-works) · [Settings](#change-ollama-settings)
 - [2. Choose models for your hardware](#2-choose-models-for-your-hardware)
 - [3. Run Aazad Chat](#3-run-aazad-chat)
 - [Troubleshooting](#troubleshooting) · [Project layout](#project-layout) · [Security](#security) · [Credits](#credits)
 
+## Install with one command
+
+The installer checks your computer (GPU, memory, disk space, anything already installed), asks you a few questions, shows a summary, and **changes nothing until you confirm**. Run it again any time to update Aazad Chat or change settings.
+
+**Linux and macOS** (Terminal):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alban-sheikh/aazad-local-llm/main/install.sh | bash
+```
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/alban-sheikh/aazad-local-llm/main/install.ps1 | iex
+```
+
+### What it asks
+
+| # | Question | Default |
+|---|---|---|
+| 1 | **AI engine:** use your existing Ollama, or install it (Linux: official system service or no-sudo home install · macOS: Homebrew or the app · Windows: winget or installer) | Existing Ollama, or the recommended install |
+| 2 | **Models:** a list with what each model is good for, its capabilities (chat, code, reasoning, vision, embeddings), download size, and how it will run on *your* hardware (fast on GPU, partly GPU, CPU, too big) | The ★ recommended models for your hardware |
+| 3 | **Model storage folder:** e.g. a bigger second drive; it can move models you already have | Where Ollama keeps them now |
+| 4 | **Keep models loaded:** 5 min, 30 min, 1 hour, or always | 30 minutes |
+| 5 | **Context length:** automatic, 4K, 8K, 16K or 32K | Automatic |
+| 6 | **App folder, chats folder and port** | Standard folders for your OS, port 3210 |
+| 7 | **Start at login, app menu shortcut, open the browser** | Yes |
+
+It never deletes Ollama or your models, and it skips models you already have.
+
+### Options
+
+| What | Linux / macOS | Windows |
+|---|---|---|
+| Preview every change without making any | `… \| bash -s -- --dry-run` | `& ([scriptblock]::Create((irm <url>))) -DryRun` |
+| Accept all defaults, no questions | `… \| bash -s -- --yes` | `… -Yes` |
+| Remove Aazad Chat (asks before deleting chats) | `… \| bash -s -- --uninstall` | `… -Uninstall` |
+| All options | `… \| bash -s -- --help` | see the top of `install.ps1` |
+
+Every question also has an option to answer it ahead of time (for example `--models=r --port=3210`), which is useful for scripted installs.
+
+**Prefer to read the script before running it?**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alban-sheikh/aazad-local-llm/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+**Tested:**
+- **Linux (Ubuntu, systemd):** tested with dry runs, a real install and uninstall.
+- **Windows:** the installer passes PowerShell's parser and analyzer and its logic tests. It hasn't yet been run on a Windows PC.
+- **macOS:** also not yet run on a Mac.
+
+If something goes wrong on Windows or macOS, please open an issue.
+
 ## Quick start
+
+Prefer to set things up by hand? Here are the steps (details for each OS below).
 
 ```bash
 # 1. Install Ollama (see your OS below), then download a model that fits your hardware
@@ -218,7 +276,7 @@ Reply speed in tokens/sec (about 0.75 words per token). Anything above ~20 feels
 
 ## 3. Run Aazad Chat
 
-Requires **Python 3.11+** and a running Ollama.
+Requires **Python 3.9+** and a running Ollama.
 
 ```bash
 git clone https://github.com/alban-sheikh/aazad-local-llm.git
