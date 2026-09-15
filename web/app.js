@@ -23,7 +23,9 @@ const STARTERS = [
 const NEW_TITLE = 'New chat';
 
 const state = {
-  chats: [],            // summaries: {id, title, model, updated}
+  chats: [],            // summaries: {id, title, model, created, updated, message_count}
+  found: null,          // ids of chats matching the search, from the server
+  defaults: {},         // settings for new chats
   chat: null,           // the open chat
   models: [],           // /api/tags
   loaded: new Map(),    // name -> /api/ps entry
@@ -262,20 +264,34 @@ function pickModel(preferred) {
   return (names.find(n => !n.includes('embed')) || names[0]) || '';
 }
 
-// ---------- chats (saved on disk by the server)
+// ---------- chats and settings (saved in the server's database)
 async function saveChat(chat, { keepTime = false } = {}) {
   if (!keepTime) chat.updated = Date.now();
   await request(`/api/chats/${chat.id}`, { method: 'PUT', body: chat });
-  const summary = { id: chat.id, title: chat.title, model: chat.model, updated: chat.updated };
+  const summary = { id: chat.id, title: chat.title, model: chat.model, created: chat.created, updated: chat.updated, message_count: chat.messages.length };
   const i = state.chats.findIndex(c => c.id === chat.id);
   if (i >= 0) state.chats[i] = summary; else state.chats.unshift(summary);
   state.chats.sort((a, b) => b.updated - a.updated);
   renderChatList();
 }
 
+let defaultsTimer = 0;
 function saveDefaults() {
   const c = state.chat;
-  store.set('aazad.defaults', { model: c.model, system: c.system, options: c.options, keep_alive: c.keep_alive, think: c.think });
+  state.defaults = { model: c.model, system: c.system, options: { ...c.options }, keep_alive: c.keep_alive, think: c.think };
+  clearTimeout(defaultsTimer); // typing a system prompt saves once, not on every key
+  defaultsTimer = setTimeout(() => {
+    request('/api/settings/defaults', { method: 'PUT', body: state.defaults }).catch(() => {});
+  }, 500);
+}
+
+// Older versions kept the new-chat defaults in the browser. Move them into the database once.
+async function moveBrowserDefaults() {
+  const old = store.get('aazad.defaults', null);
+  if (!old) return {};
+  await request('/api/settings/defaults', { method: 'PUT', body: old });
+  try { localStorage.removeItem('aazad.defaults'); } catch { /* storage unavailable */ }
+  return old;
 }
 
 function blockedWhileStreaming() {
@@ -286,7 +302,7 @@ function blockedWhileStreaming() {
 
 function newChat() {
   if (blockedWhileStreaming()) return;
-  const d = store.get('aazad.defaults', {});
+  const d = state.defaults;
   const model = pickModel(d.model);
   state.chat = {
     id: uid(), title: NEW_TITLE, model,
@@ -665,9 +681,33 @@ function renderAll() {
   renderComposer();
 }
 
+// Search titles right away, then show the server's matches, which also look inside messages.
+let searchTimer = 0;
+let searchRun = 0;
+function searchChats() {
+  clearTimeout(searchTimer);
+  const run = ++searchRun;
+  const q = ui.searchChats.value.trim();
+  state.found = null;
+  renderChatList();
+  if (!q) return;
+  searchTimer = setTimeout(async () => {
+    try {
+      const found = await getJSON(`/api/chats?q=${encodeURIComponent(q)}`);
+      if (run !== searchRun) return; // a newer search started
+      state.found = new Set(found.map(c => c.id));
+      renderChatList();
+    } catch (e) {
+      if (run === searchRun) showBanner(`Search failed: ${e.message}`);
+    }
+  }, 250);
+}
+
 function renderChatList() {
   const q = ui.searchChats.value.trim().toLowerCase();
-  const items = state.chats.filter(c => !q || c.title.toLowerCase().includes(q));
+  const items = !q ? state.chats
+    : state.found ? state.chats.filter(c => state.found.has(c.id))
+      : state.chats.filter(c => c.title.toLowerCase().includes(q));
   ui.chatList.replaceChildren(...items.map(chatItem));
   if (!items.length) ui.chatList.append(h('div', { class: 'muted small pad' }, q ? 'No matching chats' : 'Your saved chats will appear here'));
 }
@@ -921,7 +961,7 @@ function bindEvents() {
   ui.newChat.addEventListener('click', newChat);
   ui.sendBtn.addEventListener('click', send);
   ui.stopBtn.addEventListener('click', stop);
-  ui.searchChats.addEventListener('input', renderChatList);
+  ui.searchChats.addEventListener('input', searchChats);
   ui.toggleSidebar.addEventListener('click', toggleSidebar);
   ui.scrim.addEventListener('click', closeSidebarOnMobile);
   ui.themeBtn.addEventListener('click', cycleTheme);
@@ -989,7 +1029,9 @@ async function init() {
   bindEvents();
   await poll();
   try {
-    state.chats = await getJSON('/api/chats');
+    const [chats, settings] = await Promise.all([getJSON('/api/chats'), getJSON('/api/settings')]);
+    state.chats = chats;
+    state.defaults = settings.defaults || await moveBrowserDefaults();
   } catch (e) {
     showBanner(`Could not load saved chats: ${e.message}`);
   }

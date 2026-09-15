@@ -215,7 +215,8 @@ function Find-Python {
         # Skip the Microsoft Store placeholder (a 0-byte alias that opens the Store)
         if ($cmd.Source -like '*\WindowsApps\*' -and (Get-Item $cmd.Source -ErrorAction SilentlyContinue).Length -eq 0) { continue }
         try {
-            $out = & $cmd.Source @($c.Args) -c 'import sys; print(sys.executable) if sys.version_info >= (3, 9) else sys.exit(1)' 2>$null
+            # sqlite3 holds the chats; it's part of every python.org and winget Python
+            $out = & $cmd.Source @($c.Args) -c 'import sys, sqlite3; print(sys.executable) if sys.version_info >= (3, 9) else sys.exit(1)' 2>$null
             if ($LASTEXITCODE -eq 0 -and $out) { return ([string]$out).Trim() }
         } catch { continue }
     }
@@ -304,7 +305,7 @@ function Invoke-Uninstall($Conf) {
     $app = if ($Conf) { $Conf.AppDir } else { Join-Path $env:LOCALAPPDATA 'AazadChat\app' }
     $data = if ($Conf) { $Conf.DataDir } else { Join-Path $env:LOCALAPPDATA 'AazadChat' }
     Say "  App folder:   $app"
-    Say "  Chats folder: $data\chats"
+    Say "  Chats database: $data\aazad-chat.db"
     Say '  Ollama and your models are not touched.'
     if (-not (Confirm-Choice 'Remove Aazad Chat?' $false)) { Say 'Nothing was changed.'; return }
 
@@ -527,7 +528,7 @@ function Main {
     Say "  Keep loaded:      $keep"
     Say "  Context length:   $ctx"
     Say "  App folder:       $appDirChoice"
-    Say "  Chats folder:     $dataDirChoice\chats"
+    Say "  Chats database:   $dataDirChoice\aazad-chat.db"
     Say "  Address:          http://127.0.0.1:$portChoice"
     Say ("  Start at sign-in: {0}" -f $(if ($autostartChoice) { 'yes' } else { 'no' }))
     Say ("  Start menu:       {0}" -f $(if ($shortcutChoice) { 'yes' } else { 'no' }))
@@ -606,7 +607,7 @@ function Main {
     Install-AazadFiles $appDirChoice
 
     Invoke-Step "save AAZAD_CHAT_PORT=$portChoice and AAZAD_CHAT_DATA=$dataDirChoice as user variables" {
-        New-Item -ItemType Directory -Path (Join-Path $dataDirChoice 'chats') -Force | Out-Null
+        New-Item -ItemType Directory -Path $dataDirChoice -Force | Out-Null
         [Environment]::SetEnvironmentVariable('AAZAD_CHAT_PORT', [string]$portChoice, 'User')
         [Environment]::SetEnvironmentVariable('AAZAD_CHAT_DATA', $dataDirChoice, 'User')
         $env:AAZAD_CHAT_PORT = [string]$portChoice
@@ -645,7 +646,7 @@ function Main {
     Section 'Done'
     if ($DryRun) { Say '  Dry run finished. Run again without -DryRun to install.'; return }
     Say "  Aazad Chat: http://127.0.0.1:$portChoice"
-    Say "  Chats:      $dataDirChoice\chats"
+    Say "  Chats:      $dataDirChoice\aazad-chat.db"
     Say '  Update or change settings: run this installer again'
     Say '  Remove:     run this installer with -Uninstall'
     if ($openChoice) { Start-Process "http://127.0.0.1:$portChoice" }
