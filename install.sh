@@ -474,7 +474,8 @@ find_python() {
     path=$(command -v "$c" 2>/dev/null) || continue
     # On a Mac without developer tools, /usr/bin/python3 only opens an install dialog
     if [ "$PLATFORM" = macos ] && [ "$path" = /usr/bin/python3 ] && ! xcode-select -p >/dev/null 2>&1; then continue; fi
-    if "$path" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+    # sqlite3 holds the chats; some self-compiled Pythons are built without it
+    if "$path" -c 'import sys, sqlite3; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
       printf '%s' "$path"
       return 0
     fi
@@ -512,7 +513,7 @@ ask_questions() {
 
   PYTHON=$(find_python || true)
   if [ -z "$PYTHON" ]; then
-    warn "Python 3.9 or newer is required to run Aazad Chat, and it wasn't found."
+    warn "Python 3.9 or newer (with its sqlite3 module) is required to run Aazad Chat, and it wasn't found."
     python_hint
     exit 1
   fi
@@ -751,7 +752,7 @@ show_summary() {
   say "  Keep loaded:      $KEEP_ALIVE"
   say "  Context length:   $CONTEXT"
   say "  App folder:       $APP_DIR"
-  say "  Chats folder:     $DATA_DIR/chats"
+  say "  Chats database:   $DATA_DIR/aazad-chat.db"
   say "  Address:          http://127.0.0.1:$PORT"
   say "  Start at login:   $AUTOSTART"
   say "  Menu shortcut:    $SHORTCUT"
@@ -999,7 +1000,7 @@ install_app() {
 }
 
 setup_service() {
-  run mkdir -p "$DATA_DIR/chats"
+  run mkdir -p "$DATA_DIR"
   if systemd_user_ok; then
     local unit="$HOME/.config/systemd/user/$SERVICE.service"
     write_file "$unit" <<EOF
@@ -1139,7 +1140,7 @@ finish() {
     return 0
   fi
   say "  ${BOLD}Aazad Chat:${RESET} $url"
-  say "  Chats:      $DATA_DIR/chats"
+  say "  Chats:      $DATA_DIR/aazad-chat.db"
   if systemd_user_ok; then
     say "  Manage:     systemctl --user status|restart|stop $SERVICE"
   elif [ "$PLATFORM" = macos ]; then
@@ -1159,7 +1160,7 @@ uninstall() {
   section "Uninstall Aazad Chat"
   local app=${EXISTING_APP_DIR:-${CONF_APP_DIR:-}} data=${EXISTING_DATA_DIR:-$DEF_DATA_DIR}
   say "  App folder:   ${app:-not found}"
-  say "  Chats folder: $data/chats"
+  say "  Chats database: $data/aazad-chat.db"
   say "  Ollama and your models are not touched."
   confirm "Remove Aazad Chat?" N || { say "Nothing was changed."; exit 0; }
 

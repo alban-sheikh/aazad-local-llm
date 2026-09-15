@@ -4,7 +4,7 @@
 
 Aazad Chat is a chat app for AI models that run locally, a bit like ChatGPT or Claude. The models run on your own machine through [Ollama](https://ollama.com), so conversations never leave it.
 
-- Chats saved on your disk, with search, rename and delete
+- Chats saved on your disk in a small SQLite database, with rename, delete and search inside every message
 - Pick any installed model, and compare models with one-click Regenerate
 - Streaming replies with Stop, Copy, Edit and Regenerate
 - Thinking models show their reasoning in a collapsible box
@@ -14,7 +14,7 @@ Aazad Chat is a chat app for AI models that run locally, a bit like ChatGPT or C
 - Model manager: download (with progress), unload and delete models
 - Markdown with syntax-highlighted code, light and dark themes
 
-It has no build step and no dependencies: a small Python standard-library server plus plain HTML, CSS and JavaScript.
+It has no build step and no dependencies: a small Python standard-library server (with the SQLite that ships inside Python) plus plain HTML, CSS and JavaScript.
 
 ## Contents
 
@@ -22,7 +22,7 @@ It has no build step and no dependencies: a small Python standard-library server
 - [1. Install Ollama](#1-install-ollama): [Linux](#linux) · [macOS](#macos) · [Windows](#windows) · [Docker](#docker-any-os) · [Check it works](#check-that-ollama-works) · [Settings](#change-ollama-settings)
 - [2. Choose models for your hardware](#2-choose-models-for-your-hardware)
 - [3. Run Aazad Chat](#3-run-aazad-chat)
-- [Troubleshooting](#troubleshooting) · [Project layout](#project-layout) · [Security](#security) · [Credits](#credits)
+- [Your data](#your-data) · [Troubleshooting](#troubleshooting) · [Project layout](#project-layout) · [Security](#security) · [Credits](#credits)
 
 ## Install with one command
 
@@ -49,7 +49,7 @@ irm https://raw.githubusercontent.com/alban-sheikh/aazad-local-llm/main/install.
 | 3 | **Model storage folder:** e.g. a bigger second drive; it can move models you already have | Where Ollama keeps them now |
 | 4 | **Keep models loaded:** 5 min, 30 min, 1 hour, or always | 30 minutes |
 | 5 | **Context length:** automatic, 4K, 8K, 16K or 32K | Automatic |
-| 6 | **App folder, chats folder and port** | Standard folders for your OS, port 3210 |
+| 6 | **App folder, data folder (for the chats database) and port** | Standard folders for your OS, port 3210 |
 | 7 | **Start at login, app menu shortcut, open the browser** | Yes |
 
 It never deletes Ollama or your models, and it skips models you already have.
@@ -295,7 +295,7 @@ Open **http://127.0.0.1:3210**, choose a model at the top, and start chatting. T
 | `AAZAD_CHAT_PORT` | `3210` | Port for the web app |
 | `AAZAD_CHAT_HOST` | `127.0.0.1` | Listen address (keep it local) |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama server to use |
-| `AAZAD_CHAT_DATA` | `~/.local/share/aazad-chat` | Where chats are saved |
+| `AAZAD_CHAT_DATA` | `~/.local/share/aazad-chat` | Folder for the chats database |
 
 ### Start automatically at login (Linux, systemd)
 
@@ -327,6 +327,37 @@ Changes to files in `web/` only need a page reload.
 
 ---
 
+## Your data
+
+Everything is stored in one SQLite file, `aazad-chat.db`, in the data folder:
+
+| OS | Data folder (installer default) |
+|---|---|
+| Linux | `~/.local/share/aazad-chat/` |
+| macOS | `~/Library/Application Support/AazadChat/` |
+| Windows | `%LOCALAPPDATA%\AazadChat\` |
+
+SQLite is built into Python on every OS, so there is nothing extra to install or run. The database holds:
+
+| Table | What's in it |
+|---|---|
+| `chats` | Title, model, system prompt, options, created and updated times, message count |
+| `messages` | Each message's text, thinking, the model that wrote it, and its speed stats |
+| `attachments` | Images you sent, stored as bytes |
+| `settings` | App settings, such as the defaults for new chats |
+
+It uses write-ahead logging (WAL), so you'll also see `aazad-chat.db-wal` and `aazad-chat.db-shm` next to it while the app runs. **Don't copy the `.db` file on its own while the app is running.** Make a backup this way instead, which is safe at any time:
+
+```bash
+python3 server.py --backup ~/aazad-chat-backup.db        # Windows: py server.py --backup %USERPROFILE%\aazad-chat-backup.db
+```
+
+To restore, stop the app, replace `aazad-chat.db` with the backup (and delete any `-wal`/`-shm` files), then start it. You can browse the file with any SQLite tool, such as [DB Browser for SQLite](https://sqlitebrowser.org).
+
+- **Upgrading from an older version:** chats saved as JSON files in `chats/` are imported automatically on first start, and the old files are kept in `chats-imported/`.
+- **Keep the data folder on a local disk**, not a network drive. SQLite's locking isn't reliable over network file systems.
+- New versions update the database layout automatically. An older app refuses to open a database from a newer one rather than damage it.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -337,11 +368,13 @@ Changes to files in `web/` only need a page reload.
 | First reply takes long | The model is loading. Raise `OLLAMA_KEEP_ALIVE` so it stays loaded |
 | Image attach says the model can't read images | Switch to a vision model such as `gemma3:4b` |
 | Port 3210 already in use | `AAZAD_CHAT_PORT=3211 python3 server.py` |
+| `No module named '_sqlite3'` | Your Python was built without SQLite (usually pyenv). Install the SQLite headers (`libsqlite3-dev` / `sqlite-devel`) and rebuild it, or use your system's Python |
+| "database is locked" | Another program has the database open for writing, often a DB browser with unsaved changes. Close it |
 
 ## Project layout
 
 ```
-server.py                 web server: static files, chat storage, Ollama proxy
+server.py                 web server: static files, SQLite chat storage, Ollama proxy
 web/index.html            page structure
 web/app.js                app logic
 web/style.css             design and brand colours
@@ -350,7 +383,7 @@ web/icon.svg              logo
 web/vendor/               bundled libraries (see THIRD_PARTY_NOTICES.md)
 ```
 
-Chats are saved as one JSON file per conversation in `~/.local/share/aazad-chat/chats/`, outside the repository.
+Chats are saved in `aazad-chat.db` in the data folder, outside the repository (see [Your data](#your-data)).
 
 ## Security
 
