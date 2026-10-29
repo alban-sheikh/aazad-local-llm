@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 
@@ -41,11 +42,16 @@ class HealthTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def assertHealthBody(self, data):
+        self.assertEqual(set(data), {"ok", "version", "uptime"})
+        self.assertIs(data["ok"], True)
+        self.assertEqual(data["version"], server.VERSION)
+
     def test_get_returns_ok_and_version(self):
         status, ctype, body = self.request("GET", "/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(ctype, "application/json")
-        self.assertEqual(json.loads(body), {"ok": True, "version": server.VERSION})
+        self.assertHealthBody(json.loads(body))
 
     def test_version_is_non_empty_string(self):
         self.assertIsInstance(server.VERSION, str)
@@ -60,7 +66,7 @@ class HealthTest(unittest.TestCase):
     def test_query_string(self):
         status, _, body = self.request("GET", "/api/health?x=1")
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body), {"ok": True, "version": server.VERSION})
+        self.assertHealthBody(json.loads(body))
 
     def test_bad_host_forbidden(self):
         status, _, _ = self.request("GET", "/api/health", host="evil.example")
@@ -73,6 +79,23 @@ class HealthTest(unittest.TestCase):
                 self.assertEqual(status, 405)
                 self.assertEqual(ctype, "application/json")
                 self.assertIn("error", json.loads(body))
+
+    def test_uptime_is_non_negative_int(self):
+        _, _, body = self.request("GET", "/api/health")
+        uptime = json.loads(body)["uptime"]
+        self.assertIsInstance(uptime, int)
+        self.assertNotIsInstance(uptime, bool)
+        self.assertGreaterEqual(uptime, 0)
+        self.assertLess(uptime, 5)  # the module was loaded moments ago
+
+    def test_uptime_grows(self):
+        saved = server.STARTED
+        server.STARTED = time.monotonic() - 100  # pretend the server started 100 s ago
+        try:
+            _, _, body = self.request("GET", "/api/health")
+        finally:
+            server.STARTED = saved
+        self.assertGreaterEqual(json.loads(body)["uptime"], 100)
 
     def test_does_not_create_database(self):
         self.request("GET", "/api/health")

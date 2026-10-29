@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlsplit
 HOST = os.environ.get("AAZAD_CHAT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("AAZAD_CHAT_PORT", "3210"))
 VERSION = "1.0"
+STARTED = time.monotonic()  # for uptime in /api/health
 OLLAMA = urlsplit(os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DATA_DIR = Path(os.environ.get("AAZAD_CHAT_DATA", Path.home() / ".local/share/aazad-chat")).expanduser()
@@ -401,7 +402,8 @@ class Handler(BaseHTTPRequestHandler):
                 if method != "GET":
                     self.send_json(405, {"error": "method not allowed"})
                 elif self.allowed(api=False):  # Host check only; no private data here
-                    self.send_json(200, {"ok": True, "version": VERSION})
+                    self.send_json(200, {"ok": True, "version": VERSION,
+                                         "uptime": int(time.monotonic() - STARTED)})
             elif method == "GET":
                 if self.allowed(api=False):
                     self.static(path)
