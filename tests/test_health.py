@@ -21,6 +21,9 @@ class HealthTest(unittest.TestCase):
     def setUpClass(cls):
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         cls.port = cls.httpd.server_address[1]
+        # Allow the Host header for the real test port, as main() does via use_port().
+        cls.saved_port = server.PORT
+        server.use_port(cls.port)
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.thread.start()
 
@@ -29,12 +32,12 @@ class HealthTest(unittest.TestCase):
         cls.httpd.shutdown()
         cls.httpd.server_close()
         cls.thread.join(timeout=5)
+        server.use_port(cls.saved_port)
 
     def request(self, method, path, host=None, headers=None):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         try:
-            # ALLOWED_HOSTS is built from server.PORT, not the random test port.
-            hdrs = {"Host": host or f"127.0.0.1:{server.PORT}"}
+            hdrs = {"Host": host or f"127.0.0.1:{self.port}"}
             hdrs.update(headers or {})
             conn.request(method, path, headers=hdrs)
             resp = conn.getresponse()
@@ -59,7 +62,7 @@ class HealthTest(unittest.TestCase):
 
     def test_works_without_x_aazad_chat_header(self):
         # self.request never sends X-Aazad-Chat
-        status, _, body = self.request("GET", "/api/health", host=f"localhost:{server.PORT}")
+        status, _, body = self.request("GET", "/api/health", host=f"localhost:{self.port}")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["ok"], True)
 
@@ -71,6 +74,11 @@ class HealthTest(unittest.TestCase):
     def test_bad_host_forbidden(self):
         status, _, _ = self.request("GET", "/api/health", host="evil.example")
         self.assertEqual(status, 403)
+
+    def test_other_port_host_forbidden(self):
+        if self.port != server.DEFAULT_PORT:
+            status, _, _ = self.request("GET", "/api/health", host=f"127.0.0.1:{server.DEFAULT_PORT}")
+            self.assertEqual(status, 403)
 
     def test_other_methods_not_allowed(self):
         for method in ("POST", "PUT", "DELETE"):
@@ -99,6 +107,8 @@ class HealthTest(unittest.TestCase):
 
     def test_does_not_create_database(self):
         self.request("GET", "/api/health")
+        # server.DB_PATH: another test module may have imported server first with its own data folder.
+        self.assertFalse(server.DB_PATH.exists())
         self.assertFalse(os.path.exists(os.path.join(DATA.name, "aazad-chat.db")))
 
 

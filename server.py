@@ -8,6 +8,7 @@
 Only listens on 127.0.0.1. Standard library only (sqlite3 ships with Python).
 
     python3 server.py                     start the app
+    python3 server.py --port 3211         start it on another port
     python3 server.py --backup FILE       copy the database safely, even while the app runs
 """
 import argparse
@@ -26,7 +27,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 HOST = os.environ.get("AAZAD_CHAT_HOST", "127.0.0.1")
-PORT = int(os.environ.get("AAZAD_CHAT_PORT", "3210"))
+DEFAULT_PORT = 3210
+PORT = DEFAULT_PORT  # the port really used; set by main() from --port or AAZAD_CHAT_PORT
 VERSION = "1.0"
 STARTED = time.monotonic()  # for uptime in /api/health
 OLLAMA = urlsplit(os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
@@ -39,7 +41,7 @@ CHAT_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 SETTING_KEY = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 MAX_BODY = 64 * 1024 * 1024  # chats can hold base64 images
 MAX_SETTING = 1024 * 1024
-ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+ALLOWED_HOSTS = set()  # set by use_port()
 TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -50,6 +52,36 @@ TYPES = {
 }
 CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+
+
+# ================================================================ port
+
+def parse_port(value):
+    """A port number from text: a whole number from 1 to 65535, else ValueError."""
+    text = str(value).strip()
+    if not (text.isascii() and text.isdigit()) or not 1 <= int(text) <= 65535:
+        raise ValueError(f"invalid port {value!r}: use a whole number from 1 to 65535")
+    return int(text)
+
+
+def resolve_port(flag=None, env=None):
+    """--port wins over AAZAD_CHAT_PORT, which wins over the default."""
+    if flag is not None:
+        return parse_port(flag)
+    if env is not None and env.strip():
+        return parse_port(env)
+    return DEFAULT_PORT
+
+
+def use_port(port):
+    """Listen on port, and accept only Host headers for that port."""
+    global PORT
+    PORT = port
+    ALLOWED_HOSTS.clear()
+    ALLOWED_HOSTS.update({f"127.0.0.1:{port}", f"localhost:{port}"})
+
+
+use_port(DEFAULT_PORT)
 
 
 # ================================================================ database
@@ -526,14 +558,27 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="Aazad Chat: free, private AI on your own computer.")
+    parser.add_argument("--port", metavar="PORT",
+                        help=f"port for the web app (1-65535). Overrides the AAZAD_CHAT_PORT environment variable;"
+                             f" default {DEFAULT_PORT}")
     parser.add_argument("--backup", metavar="FILE", help="copy the chat database to FILE and exit")
     args = parser.parse_args()
     if args.backup:
         return backup(args.backup)
 
+    try:
+        port = resolve_port(args.port, os.environ.get("AAZAD_CHAT_PORT"))
+    except ValueError as exc:
+        source = "--port" if args.port is not None else "AAZAD_CHAT_PORT"
+        parser.error(f"{source}: {exc}")
+    use_port(port)
+
     init_db()
     import_legacy_chats()
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as exc:
+        sys.exit(f"Cannot listen on {HOST}:{PORT} ({exc.strerror or exc}). Try another port with --port.")
     server.daemon_threads = True
     print(f"Aazad Chat on http://{HOST}:{PORT} (database: {DB_PATH}, {JOURNAL_MODE} mode;"
           f" ollama: {OLLAMA.geturl()})", flush=True)
