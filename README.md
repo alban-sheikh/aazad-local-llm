@@ -297,6 +297,8 @@ Open **http://127.0.0.1:3210**, choose a model at the top, and start chatting. T
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama server to use |
 | `AAZAD_CHAT_DATA` | `~/.local/share/aazad-chat` | Folder for the chats database |
 
+To use another port for one run, pass `--port`: `python3 server.py --port 3211`. It wins over `AAZAD_CHAT_PORT`; with neither, the port is `3210`. The port must be a whole number from 1 to 65535. Run `python3 server.py --help` for all options.
+
 ### Start automatically at login (Linux, systemd)
 
 `~/.config/systemd/user/aazad-chat.service` (adjust the path to where you cloned it):
@@ -367,7 +369,7 @@ To restore, stop the app, replace `aazad-chat.db` with the backup (and delete an
 | Replies are slow | Run `ollama ps`. If it isn't `100% GPU`, pick a smaller model or lower the context length in ⚙ settings |
 | First reply takes long | The model is loading. Raise `OLLAMA_KEEP_ALIVE` so it stays loaded |
 | Image attach says the model can't read images | Switch to a vision model such as `gemma3:4b` |
-| Port 3210 already in use | `AAZAD_CHAT_PORT=3211 python3 server.py` |
+| Port 3210 already in use | `python3 server.py --port 3211` (or `AAZAD_CHAT_PORT=3211 python3 server.py`), then open http://127.0.0.1:3211 |
 | `No module named '_sqlite3'` | Your Python was built without SQLite (usually pyenv). Install the SQLite headers (`libsqlite3-dev` / `sqlite-devel`) and rebuild it, or use your system's Python |
 | "database is locked" | Another program has the database open for writing, often a DB browser with unsaved changes. Close it |
 
